@@ -15,7 +15,7 @@ RegisterNetEvent('postboxThief:server:Reward', function(skillSuccess)
         return
     end
 
-    -- Rate Limiting: Count successful operations within RateLimitWindow seconds.
+    -- Rate Limiting: Count successful operations within the RateLimitWindow.
     operationCount[src] = operationCount[src] or {}
     for i = #operationCount[src], 1, -1 do
         if currentTime - operationCount[src][i] > Config.RateLimitWindow then
@@ -48,16 +48,15 @@ RegisterNetEvent('postboxThief:server:Reward', function(skillSuccess)
         end
     end)
 
-    local rewardGiven = false
+    -- Process rewards for both money and item if applicable.
     if Config.RewardType == "money" or Config.RewardType == "both" then
         local cashAmount = math.random(Config.RewardCash.min, Config.RewardCash.max)
         if Player then
             Player.Functions.AddMoney("cash", cashAmount)
             TriggerClientEvent('postboxThief:client:RewardCash', src, cashAmount)
-            rewardGiven = true
         end
     end
-    if (Config.RewardType == "item" or Config.RewardType == "both") and not rewardGiven then
+    if Config.RewardType == "item" or Config.RewardType == "both" then
         local rewards = Config.RewardItems
         if rewards and #rewards > 0 then
             local rewardData = rewards[math.random(#rewards)]
@@ -67,16 +66,10 @@ RegisterNetEvent('postboxThief:server:Reward', function(skillSuccess)
                 local added = Player.Functions.AddItem(itemName, count)
                 if added then
                     TriggerClientEvent('postboxThief:client:RewardItem', src, itemName, count)
-                    rewardGiven = true
                 end
             end
         end
     end
 
-    if rewardGiven then
-        TriggerClientEvent('postboxThief:client:RewardResult', src, true)
-    else
-        TriggerClientEvent('postboxThief:client:Failed', src)
-        TriggerClientEvent('postboxThief:client:RewardResult', src, false)
-    end
+    TriggerClientEvent('postboxThief:client:RewardResult', src, true)
 end)
