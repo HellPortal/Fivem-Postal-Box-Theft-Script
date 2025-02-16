@@ -1,5 +1,5 @@
 -- client/client.lua
--- Handles player interaction and displays a progress circle for theft.
+-- Handles player interaction and displays progress circle above the target.
 if not _G.Framework then error("Framework not loaded!") end
 local Framework = _G.Framework
 
@@ -33,25 +33,32 @@ local showPersistentText = false
 local persistentTextCoords = nil  -- expected as {x, y, z}
 local lastInteractionTime = 0
 local theftActive = false
+local notified = false  -- flag to prevent duplicate notifications
 
-local MAX_DISTANCE = 10.0  -- max distance before canceling
+local MAX_DISTANCE = 5.0  -- Maximum allowed distance from the target
 
 Citizen.CreateThread(function()
     while true do
-        if showPersistentText and persistentTextCoords and persistentTextCoords[1] and persistentTextCoords[2] and persistentTextCoords[3] then
+        if showPersistentText and persistentTextCoords then
             local playerPos = GetEntityCoords(PlayerPedId())
             local targetPos = vec3(persistentTextCoords[1], persistentTextCoords[2], persistentTextCoords[3])
             local dist = #(playerPos - targetPos)
             if dist <= MAX_DISTANCE then
                 DrawText3D(persistentTextCoords[1], persistentTextCoords[2], persistentTextCoords[3] + 1.0, "Press E to start theft")
             else
+                if not notified then
+                    Framework.DoNotification("You moved too far away. Theft failed.", "error")
+                    notified = true
+                end
                 showPersistentText = false
-                Framework.DoNotification("You moved too far away. Theft failed.", "error")
                 theftActive = false
             end
             if (GetGameTimer() - lastInteractionTime) > 60000 then
+                if not notified then
+                    Framework.DoNotification("You are locked out. Please try again in 60 seconds.", "error")
+                    notified = true
+                end
                 showPersistentText = false
-                Framework.DoNotification("You are locked out. Please try again in 60 seconds.", "error")
                 break
             end
         end
@@ -73,6 +80,7 @@ end)
 RegisterNetEvent("postboxThief:stealMail", function(targetCoords)
     if theftActive then return end
     theftActive = true
+    notified = false  -- Reset notification flag for this attempt
 
     if targetCoords and targetCoords.x and targetCoords.y and targetCoords.z then
         persistentTextCoords = { targetCoords.x, targetCoords.y, targetCoords.z }
@@ -103,6 +111,17 @@ RegisterNetEvent("postboxThief:stealMail", function(targetCoords)
         Citizen.CreateThread(function()
             local startTime = GetGameTimer()
             while (GetGameTimer() - startTime) < 60000 do
+                local playerPos = GetEntityCoords(PlayerPedId())
+                local targetPos = vec3(persistentTextCoords[1], persistentTextCoords[2], persistentTextCoords[3])
+                if #(playerPos - targetPos) > MAX_DISTANCE then
+                    showPersistentText = false
+                    if not notified then
+                        Framework.DoNotification("You moved too far away. Theft failed.", "error")
+                        notified = true
+                    end
+                    theftActive = false
+                    return
+                end
                 if IsControlJustPressed(0, 38) then -- E key
                     break
                 end
@@ -110,7 +129,10 @@ RegisterNetEvent("postboxThief:stealMail", function(targetCoords)
             end
             if (GetGameTimer() - startTime) >= 60000 then
                 showPersistentText = false
-                Framework.DoNotification("You are locked out. Please try again in 60 seconds.", "error")
+                if not notified then
+                    Framework.DoNotification("You are locked out. Please try again in 60 seconds.", "error")
+                    notified = true
+                end
                 theftActive = false
                 return
             end
